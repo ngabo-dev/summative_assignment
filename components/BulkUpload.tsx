@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
@@ -12,142 +12,201 @@ import {
   Clock, 
   Play,
   TrendingUp,
-  FileImage
+  FileImage,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface UploadProgress {
-  total: number;
-  success: number;
-  failed: number;
-  processing: boolean;
-}
-
-interface RetrainingProgress {
+interface RetrainProgress {
   stage: string;
   progress: number;
   isActive: boolean;
-  eta: string;
+  eta?: string;
+  error?: string;
+}
+
+interface ApiStats {
+  system: {
+    uptime: string;
+    last_trained: string;
+    prediction_count: number;
+  };
+  model: {
+    loaded: boolean;
+    path: string;
+  };
+}
+
+interface RetrainResponse {
+  success: boolean;
+  message: string;
+  new_classes: string[];
+  model_path: string;
+  timestamp: string;
+  images_processed: number;
 }
 
 export function BulkUpload() {
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('');
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
-  const [retrainingProgress, setRetrainingProgress] = useState<RetrainingProgress | null>(null);
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [retrainingProgress, setRetrainingProgress] = useState<RetrainProgress | null>(null);
+  const [apiStats, setApiStats] = useState<ApiStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const flowerClasses = ['rose', 'tulip', 'sunflower'];
+  const API_BASE_URL = 'http://localhost:8000'; // Adjust as needed
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(e.target.files);
+  // Fetch API stats on component mount
+  useEffect(() => {
+    fetchApiStats();
+  }, []);
+
+  const fetchApiStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/stats`);
+      if (response.ok) {
+        const stats = await response.json();
+        setApiStats(stats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch API stats:', error);
     }
   };
 
-  const handleBulkUpload = () => {
-    if (!files || !selectedClass) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(filesArray);
+      setError(null);
+      setSuccessMessage(null);
+    }
+  };
 
-    setUploadProgress({
-      total: files.length,
-      success: 0,
-      failed: 0,
-      processing: true
+  const handleRetrain = async () => {
+    if (!selectedFiles.length || !selectedClass) {
+      setError('Please select files and a flower class');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    
+    setRetrainingProgress({
+      stage: 'Preparing images for upload...',
+      progress: 0,
+      isActive: true
     });
 
-    // Simulate upload progress
-    let success = 0;
-    let failed = 0;
-    const interval = setInterval(() => {
-      const shouldFail = Math.random() < 0.1; // 10% chance of failure
-      if (shouldFail) {
-        failed++;
-      } else {
-        success++;
-      }
-
-      setUploadProgress({
-        total: files.length,
-        success,
-        failed,
-        processing: success + failed < files.length
+    try {
+      // Prepare form data
+      const formData = new FormData();
+      
+      // Add all selected files
+      selectedFiles.forEach((file, index) => {
+        formData.append('images', file);
       });
 
-      if (success + failed >= files.length) {
-        clearInterval(interval);
-      }
-    }, 200);
-  };
+      // Add labels (same class for all images)
+      selectedFiles.forEach(() => {
+        formData.append('labels', selectedClass);
+      });
 
-  const handleRetrain = () => {
-    const stages = [
-      { stage: 'Preparing dataset', duration: 2000 },
-      { stage: 'Data augmentation', duration: 3000 },
-      { stage: 'Model training', duration: 8000 },
-      { stage: 'Validation', duration: 2000 },
-      { stage: 'Model optimization', duration: 1500 }
-    ];
-
-    let currentStage = 0;
-    const startTime = Date.now();
-
-    const processStage = () => {
-      if (currentStage >= stages.length) {
-        setRetrainingProgress(null);
-        return;
-      }
-
-      const stage = stages[currentStage];
       setRetrainingProgress({
-        stage: stage.stage,
-        progress: 0,
-        isActive: true,
-        eta: `${Math.ceil((stage.duration * (stages.length - currentStage)) / 1000)}s`
+        stage: 'Uploading images and starting retraining...',
+        progress: 20,
+        isActive: true
       });
 
-      const stageInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime - stages.slice(0, currentStage).reduce((acc, s) => acc + s.duration, 0);
-        const progress = Math.min(100, (elapsed / stage.duration) * 100);
+      // Call the retrain endpoint
+      const response = await fetch(`${API_BASE_URL}/api/train/retrain`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result: RetrainResponse = await response.json();
+
+      if (response.ok && result.success) {
+        setRetrainingProgress({
+          stage: 'Retraining completed successfully!',
+          progress: 100,
+          isActive: false
+        });
+
+        setSuccessMessage(
+          `Successfully retrained model with ${result.images_processed} images. ${result.message}`
+        );
+
+        // Clear form
+        setSelectedFiles([]);
+        setSelectedClass('');
         
-        setRetrainingProgress(prev => prev ? {
-          ...prev,
-          progress,
-          eta: `${Math.ceil((stage.duration - elapsed + stages.slice(currentStage + 1).reduce((acc, s) => acc + s.duration, 0)) / 1000)}s`
-        } : null);
+        // Refresh stats
+        setTimeout(() => {
+          fetchApiStats();
+          setRetrainingProgress(null);
+        }, 2000);
 
-        if (progress >= 100) {
-          clearInterval(stageInterval);
-          currentStage++;
-          setTimeout(processStage, 100);
-        }
-      }, 100);
-    };
+      } else {
+        throw new Error(result.message || 'Retraining failed');
+      }
 
-    processStage();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Retraining failed: ${errorMessage}`);
+      setRetrainingProgress({
+        stage: 'Retraining failed',
+        progress: 0,
+        isActive: false,
+        error: errorMessage
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const performanceComparison = [
-    { metric: 'Accuracy', previous: 92.1, current: 94.2 },
-    { metric: 'Precision', previous: 90.5, current: 92.8 },
-    { metric: 'Recall', previous: 93.2, current: 95.1 },
-    { metric: 'F1-Score', previous: 91.8, current: 93.9 }
-  ];
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl font-medium mb-2">Bulk Upload & Retraining</h2>
-        <p className="text-muted-foreground">Upload multiple images and retrain the model with new data</p>
+        <h2 className="text-2xl font-medium mb-2">Model Retraining</h2>
+        <p className="text-muted-foreground">Upload flower images to retrain and improve the model</p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <Card className="p-4 border-red-200 bg-red-50">
+          <div className="flex items-center gap-2 text-red-700">
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">{error}</span>
+          </div>
+        </Card>
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <Card className="p-4 border-green-200 bg-green-50">
+          <div className="flex items-center gap-2 text-green-700">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">{successMessage}</span>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upload Section */}
         <Card className="p-6">
-          <h3 className="font-medium mb-4">Bulk Image Upload</h3>
+          <h3 className="font-medium mb-4">Upload Training Images</h3>
           
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">Select Flower Class</label>
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <Select value={selectedClass} onValueChange={setSelectedClass} disabled={isLoading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose flower type" />
                 </SelectTrigger>
@@ -169,178 +228,194 @@ export function BulkUpload() {
                   multiple
                   accept="image/*"
                   onChange={handleFileSelect}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={isLoading}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                   title="Select images to upload"
                 />
-                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-muted-foreground/50 transition-colors">
+                <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  isLoading 
+                    ? 'border-muted-foreground/25 bg-muted/25' 
+                    : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+                }`}>
                   <FolderOpen className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-sm">Click to select multiple images</p>
-                  {files && (
+                  {selectedFiles.length > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      {files.length} files selected
+                      {selectedFiles.length} files selected
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            <Button 
-              onClick={handleBulkUpload}
-              disabled={!files || !selectedClass || uploadProgress?.processing}
-              className="w-full"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Images
-            </Button>
-
-            {uploadProgress && (
-              <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                <div className="flex justify-between text-sm">
-                  <span>Upload Progress</span>
-                  <span>{uploadProgress.success + uploadProgress.failed}/{uploadProgress.total}</span>
-                </div>
-                <Progress value={((uploadProgress.success + uploadProgress.failed) / uploadProgress.total) * 100} />
-                
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3 text-green-500" />
-                    <span>Success: {uploadProgress.success}</span>
+            {/* Selected Files List */}
+            {selectedFiles.length > 0 && (
+              <div className="max-h-32 overflow-y-auto space-y-1 p-2 border rounded">
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between text-xs bg-muted/50 p-2 rounded">
+                    <span className="truncate flex-1">{file.name}</span>
+                    <button
+                      onClick={() => removeFile(index)}
+                      disabled={isLoading}
+                      className="text-red-500 hover:text-red-700 ml-2 disabled:opacity-50"
+                    >
+                      <XCircle className="w-3 h-3" />
+                    </button>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <XCircle className="w-3 h-3 text-red-500" />
-                    <span>Failed: {uploadProgress.failed}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-blue-500" />
-                    <span>Remaining: {uploadProgress.total - uploadProgress.success - uploadProgress.failed}</span>
-                  </div>
-                </div>
+                ))}
               </div>
             )}
-          </div>
-        </Card>
-
-        {/* Retraining Section */}
-        <Card className="p-6">
-          <h3 className="font-medium mb-4">Model Retraining</h3>
-          
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="space-y-1">
-                <div className="text-muted-foreground">Training Images</div>
-                <div className="font-medium">2,847 total</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-muted-foreground">Last Trained</div>
-                <div className="font-medium">2 hours ago</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-muted-foreground">Current Model</div>
-                <Badge variant="secondary">v2.1.3</Badge>
-              </div>
-              <div className="space-y-1">
-                <div className="text-muted-foreground">Accuracy</div>
-                <div className="font-medium">94.2%</div>
-              </div>
-            </div>
 
             <Button 
               onClick={handleRetrain}
-              disabled={retrainingProgress?.isActive}
+              disabled={!selectedFiles.length || !selectedClass || isLoading}
               className="w-full"
-              variant={retrainingProgress?.isActive ? "secondary" : "default"}
             >
-              <Play className="w-4 h-4 mr-2" />
-              {retrainingProgress?.isActive ? 'Retraining in Progress' : 'Start Retraining'}
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Retraining...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Retraining
+                </>
+              )}
             </Button>
 
             {retrainingProgress && (
               <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
                 <div className="flex justify-between text-sm">
                   <span>{retrainingProgress.stage}</span>
-                  <span>ETA: {retrainingProgress.eta}</span>
+                  {retrainingProgress.eta && (
+                    <span>ETA: {retrainingProgress.eta}</span>
+                  )}
                 </div>
                 <Progress value={retrainingProgress.progress} />
-                <div className="text-xs text-muted-foreground">
-                  Training with augmented dataset...
-                </div>
+                {retrainingProgress.error && (
+                  <div className="text-xs text-red-600">
+                    Error: {retrainingProgress.error}
+                  </div>
+                )}
+                {retrainingProgress.isActive && (
+                  <div className="text-xs text-muted-foreground">
+                    Processing {selectedFiles.length} images for {selectedClass} class...
+                  </div>
+                )}
               </div>
             )}
           </div>
         </Card>
+
+        {/* Model Status Section */}
+        <Card className="p-6">
+          <h3 className="font-medium mb-4">Current Model Status</h3>
+          
+          <div className="space-y-4">
+            {apiStats ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">Model Status</div>
+                  <div className="flex items-center gap-2">
+                    {apiStats.model.loaded ? (
+                      <>
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">Loaded</Badge>
+                      </>
+                    ) : (
+                      <Badge variant="destructive">Not Loaded</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">System Uptime</div>
+                  <div className="font-medium">{apiStats.system.uptime}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">Last Trained</div>
+                  <div className="font-medium">{apiStats.system.last_trained}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground">Total Predictions</div>
+                  <div className="font-medium">{apiStats.system.prediction_count.toLocaleString()}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            <Button 
+              onClick={fetchApiStats}
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              className="w-full"
+            >
+              Refresh Status
+            </Button>
+
+            <div className="text-xs text-muted-foreground border-t pt-4">
+              <div><strong>Model Path:</strong> {apiStats?.model.path || 'Loading...'}</div>
+              <div><strong>Supported Classes:</strong> {flowerClasses.join(', ')}</div>
+              <div><strong>Supported Formats:</strong> PNG, JPG, JPEG, GIF</div>
+            </div>
+          </div>
+        </Card>
       </div>
 
-      {/* Performance Comparison */}
+      {/* Instructions */}
       <Card className="p-6">
-        <h3 className="font-medium mb-4">Model Performance Comparison</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {performanceComparison.map((metric, index) => (
-            <div key={index} className="text-center p-4 border rounded-lg">
-              <div className="text-sm text-muted-foreground mb-1">{metric.metric}</div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-muted-foreground">Previous:</span>
-                  <span className="font-medium">{metric.previous}%</span>
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-muted-foreground">Current:</span>
-                  <span className="font-medium text-green-600">{metric.current}%</span>
-                  <TrendingUp className="w-3 h-3 text-green-500" />
-                </div>
-              </div>
-              <div className="text-xs text-green-600 mt-1">
-                +{(metric.current - metric.previous).toFixed(1)}%
+        <h3 className="font-medium mb-4">Retraining Instructions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600 mt-0.5">
+              1
+            </div>
+            <div>
+              <div className="font-medium text-sm">Select Class & Images</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Choose the flower type and select multiple high-quality images of that flower
               </div>
             </div>
-          ))}
+          </div>
+          
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600 mt-0.5">
+              2
+            </div>
+            <div>
+              <div className="font-medium text-sm">Start Retraining</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Click "Start Retraining" to upload images and retrain the model (takes ~30-60 seconds)
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-xs font-bold text-green-600 mt-0.5">
+              3
+            </div>
+            <div>
+              <div className="font-medium text-sm">Model Updated</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                The model is automatically updated and ready for improved predictions
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
 
-      {/* Recent Uploads */}
+      {/* Technical Details */}
       <Card className="p-6">
-        <h3 className="font-medium mb-4">Recent Upload History</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b">
-            <div className="flex items-center gap-3">
-              <FileImage className="w-4 h-4 text-blue-500" />
-              <div>
-                <div className="font-medium text-sm">75 Tulip Images</div>
-                <div className="text-xs text-muted-foreground">Uploaded by Admin</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm">6 hours ago</div>
-              <Badge variant="secondary" className="text-xs">Processed</Badge>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between py-2 border-b">
-            <div className="flex items-center gap-3">
-              <FileImage className="w-4 h-4 text-red-500" />
-              <div>
-                <div className="font-medium text-sm">42 Rose Images</div>
-                <div className="text-xs text-muted-foreground">Uploaded by DataTeam</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm">1 day ago</div>
-              <Badge variant="secondary" className="text-xs">Processed</Badge>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <FileImage className="w-4 h-4 text-yellow-500" />
-              <div>
-                <div className="font-medium text-sm">28 Sunflower Images</div>
-                <div className="text-xs text-muted-foreground">Uploaded by MLTeam</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm">2 days ago</div>
-              <Badge variant="secondary" className="text-xs">Processed</Badge>
-            </div>
-          </div>
+        <h3 className="font-medium mb-4">Technical Details</h3>
+        <div className="text-xs text-muted-foreground space-y-1">
+          <div><strong>API Endpoint:</strong> POST /api/train/retrain</div>
+          <div><strong>Retraining Method:</strong> Transfer learning with 5 epochs</div>
+          <div><strong>Image Requirements:</strong> Any size (auto-resized to 150x150)</div>
+          <div><strong>Batch Processing:</strong> All images processed simultaneously</div>
+          <div><strong>Model Update:</strong> Automatic reload after successful training</div>
         </div>
       </Card>
     </div>
