@@ -12,8 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 
 type Page = 'dashboard' | 'single-prediction' | 'bulk-upload' | 'data-insights' | 'model-management' | 'system-monitoring';
 
-// API configuration
-const API_BASE_URL = 'http://localhost:5000/api';
+// Updated API configuration for FastAPI
+const API_BASE_URL = 'http://localhost:8000/api'; // FastAPI typically runs on 8000 by default
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -36,6 +36,7 @@ export default function App() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
       
+      // Updated health check endpoint for FastAPI
       const response = await fetch(`${API_BASE_URL}/health`, {
         signal: controller.signal,
         headers: {
@@ -52,7 +53,7 @@ export default function App() {
           setApiStatus('online');
           // Only log when successfully connecting (not every health check)
           if (apiStatus !== 'online') {
-            console.log('✅ Flask backend connected:', healthData);
+            console.log('✅ FastAPI backend connected:', healthData);
           }
         } else {
           setApiStatus('offline');
@@ -69,7 +70,7 @@ export default function App() {
       
       // Log connection errors for debugging
       if (apiStatus !== 'offline') {
-        console.error('❌ Flask backend connection failed:', error instanceof Error ? error.message : 'Unknown error');
+        console.error('❌ FastAPI backend connection failed:', error instanceof Error ? error.message : 'Unknown error');
       }
     }
   };
@@ -178,21 +179,21 @@ export default function App() {
                 <AlertDescription className="text-red-700 dark:text-red-300">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <div className="font-medium mb-2">🔧 Setup Instructions</div>
+                      <div className="font-medium mb-2">🔧 FastAPI Setup Instructions</div>
                       <div className="text-sm space-y-1">
                         <div>• Navigate to the <code className="bg-red-200 dark:bg-red-900 px-1 rounded">backend/</code> directory</div>
                         <div>• Install dependencies: <code className="bg-red-200 dark:bg-red-900 px-1 rounded">pip install -r requirements.txt</code></div>
-                        <div>• Start the Flask server: <code className="bg-red-200 dark:bg-red-900 px-1 rounded">python app.py</code></div>
-                        <div>• Ensure the server is running on port 5000</div>
+                        <div>• Start the FastAPI server: <code className="bg-red-200 dark:bg-red-900 px-1 rounded">uvicorn app:app --reload --port 8000</code></div>
+                        <div>• Ensure CORS is properly configured in your FastAPI app</div>
                       </div>
                     </div>
                     <div>
                       <div className="font-medium mb-2">🔍 Troubleshooting</div>
                       <div className="text-sm space-y-1">
-                        <div>• Check if Flask server is running</div>
-                        <div>• Verify port 5000 is not blocked</div>
-                        <div>• Check console for connection errors</div>
-                        <div>• Ensure CORS is properly configured</div>
+                        <div>• Check if Uvicorn server is running</div>
+                        <div>• Verify port 8000 is not blocked</div>
+                        <div>• Check console for CORS errors</div>
+                        <div>• Test the API directly at <code className="bg-red-200 dark:bg-red-900 px-1 rounded">http://localhost:8000/health</code></div>
                       </div>
                     </div>
                   </div>
