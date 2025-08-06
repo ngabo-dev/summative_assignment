@@ -1,12 +1,16 @@
 # 🌸 Flower Classification API Backend
 
-Production-ready Flask API for flower image classification with real-time statistics and model training capabilities.
+Production-ready FastAPI backend for flower image classification with real-time statistics and model training capabilities.
+
+## 📺 Video Tutorial
+
+🎥 **Watch the complete setup and demo:** [Flower Classification ML Platform Tutorial](https://www.youtube.com/watch?v=E4B0uK4fOJ4)
 
 ## 📁 Simplified Structure
 
 ```
 backend/
-├── app.py                        # Main Flask application ⭐
+├── app.py                        # Main FastAPI application ⭐
 ├── requirements.txt              # Dependencies ⭐
 ├── src/                          # ML modules
 │   ├── model.py
@@ -19,7 +23,7 @@ backend/
 ```
 
 **Key Files:**
-- **`app.py`** - Main Flask application (all endpoints)
+- **`app.py`** - Main FastAPI application (all endpoints)
 - **`requirements.txt`** - All dependencies
 - **`src/`** - ML source code modules
 
@@ -32,6 +36,8 @@ pip install -r requirements.txt
 
 # Run the application
 python app.py
+# Or with uvicorn
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Production Deployment (Render.com)
@@ -46,7 +52,7 @@ git push origin main
 #    - Connect GitHub repo
 #    - Build: pip install -r requirements.txt
 #    - Start: python app.py
-#    - Environment: PORT=10000, FLASK_ENV=production
+#    - Environment: PORT=10000, FASTAPI_ENV=production
 
 # 3. Test deployment
 curl https://your-app-name.onrender.com/
@@ -61,20 +67,23 @@ curl https://your-app-name.onrender.com/
 - **Model retraining support** - Background training with progress tracking
 - **Balanced predictions** - Fixed single-class bias issue
 - **Simplified structure** - Only app.py and requirements.txt needed
+- **FastAPI performance** - Async/await support for better performance
+- **Automatic API documentation** - Interactive docs at `/docs`
 
 ### 🛠️ API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/` | Health check |
+| GET | `/docs` | Interactive API documentation |
 | GET | `/api/stats` | Real-time system statistics |
 | POST | `/api/predict/single` | Single image prediction |
 | POST | `/api/predict/batch` | Batch image prediction |
 | POST | `/api/upload/training` | Upload training images |
 | POST | `/api/train/start` | Start model training |
-| GET | `/api/train/status/<job_id>` | Get training progress |
+| GET | `/api/train/status/{job_id}` | Get training progress |
 | GET | `/api/models` | List model versions |
-| POST | `/api/models/<version>/deploy` | Deploy model version |
+| POST | `/api/models/{version}/deploy` | Deploy model version |
 | GET | `/api/data/insights` | Dataset insights |
 | GET | `/api/system/logs` | System logs |
 
@@ -151,8 +160,8 @@ curl -X POST \
 ### Security
 - File size limits (16MB max)
 - Secure filename handling
-- Input validation
-- Error handling
+- Input validation with Pydantic models
+- Error handling with FastAPI exception handlers
 - CORS configuration
 
 ### Monitoring
@@ -161,21 +170,23 @@ curl -X POST \
 - Performance metrics ✅
 - Health check endpoints ✅
 - Dynamic statistics updates ✅
+- Request/response timing
 
 ### Reliability
 - Graceful error handling
 - Thread-safe operations
 - Automatic service recovery
-- Background job processing
+- Background job processing with FastAPI BackgroundTasks
+- Async/await for better performance
 
 ## 🔧 Environment Variables
 
 Required for production deployment:
 
 ```bash
-PORT=10000                    # Server port
-FLASK_ENV=production         # Environment
-PYTHON_VERSION=3.9.18        # Python version
+PORT=8000                    # Server port
+FASTAPI_ENV=production      # Environment
+PYTHON_VERSION=3.9.18       # Python version
 PYTHONPATH=/opt/render/project/src  # Module path
 ```
 
@@ -185,6 +196,9 @@ PYTHONPATH=/opt/render/project/src  # Module path
 ```bash
 # Simple health check
 curl https://your-api.onrender.com/
+
+# Interactive API documentation
+curl https://your-api.onrender.com/docs
 
 # Test real-time stats
 curl https://your-api.onrender.com/api/stats
@@ -208,7 +222,7 @@ git push origin main
 # 2. Configure Render service:
 #    Build Command: pip install -r requirements.txt
 #    Start Command: python app.py
-#    Environment Variables: PORT=10000, FLASK_ENV=production
+#    Environment Variables: PORT=8000, FASTAPI_ENV=production
 
 # 3. Deploy and verify
 curl https://your-app-name.onrender.com/api/stats
@@ -225,8 +239,11 @@ See [RENDER_DEPLOYMENT_GUIDE.md](RENDER_DEPLOYMENT_GUIDE.md) for detailed step-b
 python app.py
 
 # Test endpoints
-curl http://localhost:5000/api/stats
-curl -X POST -F "image=@test.jpg" http://localhost:5000/api/predict/single
+curl http://localhost:8000/api/stats
+curl -X POST -F "image=@test.jpg" http://localhost:8000/api/predict/single
+
+# View interactive docs
+open http://localhost:8000/docs
 ```
 
 ### Production Testing
@@ -266,19 +283,6 @@ const predictImage = async (imageFile: File) => {
 };
 ```
 
-## 🧹 Cleanup (Optional)
-
-If you have old duplicate files, run:
-```bash
-python cleanup_old_files.py
-```
-
-This removes:
-- `production_app.py` (consolidated into `app.py`)
-- `simplified_app.py` (consolidated into `app.py`)
-- `requirements_production.txt` (consolidated into `requirements.txt`)
-- `requirements_minimal.txt` (consolidated into `requirements.txt`)
-
 ## 🆘 Troubleshooting
 
 ### Common Issues
@@ -287,6 +291,7 @@ This removes:
 - Check `python app.py` works locally
 - Verify `requirements.txt` installs correctly
 - Check environment variables on Render
+- Ensure FastAPI and uvicorn are installed
 
 **Statistics not updating:**
 - ✅ **FIXED** - Now updates in real-time
@@ -297,11 +302,15 @@ This removes:
 - Ensure ML dependencies installed
 - Check image format (PNG, JPG, JPEG, GIF)
 - Verify file size (max 16MB)
+- Check model loading in logs
 
 ### Debug Commands
 ```bash
 # Check service health
 curl https://your-api.onrender.com/
+
+# View interactive API docs
+open https://your-api.onrender.com/docs
 
 # View detailed stats (should update every refresh)
 curl https://your-api.onrender.com/api/stats
@@ -313,13 +322,15 @@ curl -X POST -F "image=@flower.jpg" https://your-api.onrender.com/api/predict/si
 ## 🎉 Ready for Production!
 
 Your simplified API structure:
-- ✅ **`app.py`** - Single main Flask file
+- ✅ **`app.py`** - Single main FastAPI file
 - ✅ **`requirements.txt`** - Single requirements file  
 - ✅ Real-time statistics that actually update
 - ✅ All endpoints working correctly
 - ✅ Model training and prediction
+- ✅ Interactive API documentation at `/docs`
 - ✅ Ready for Render.com deployment
+- ✅ Async/await performance optimization
 
 Deploy now and your flower classification API will work perfectly! 🌸🌷🌻
 
-**No more confusion with multiple files - just `app.py` and `requirements.txt`!**
+**No more confusion with multiple files - just `app.py` and `requirements.txt` with FastAPI power!**
