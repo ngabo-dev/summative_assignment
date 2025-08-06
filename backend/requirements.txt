@@ -1,5 +1,5 @@
 # Core ML and Data Science Libraries
-tensorflow==2.15.0         # Requires numpy<2.0.0 for Py3.12
+tensorflow==2.16.1         # Requires numpy<2.0.0 for Py3.12
 numpy==1.26.4               # Downgraded to meet TF's requirements
 scikit-learn==1.5.0
 pandas==2.2.2
